@@ -52,6 +52,7 @@ TESTS_SH+=	t_setjmp
 .if ${MKRUMP} != "no"
 TESTS_SH+=	t_simplehook
 .endif
+TESTS_SH+=	t_singleprincipal
 TESTS_SH+=	t_trapsignal
 TESTS_SH+=	t_umountstress
 TESTS_SH+=	t_umount
@@ -68,6 +69,7 @@ PROGS+=		h_getstack
 PROGS+=		h_ps_strings1
 PROGS+=		h_ps_strings2
 PROGS+=		h_segv
+PROGS+=		h_singleprincipal
 
 SCRIPTSDIR=	${TESTSDIR}
 SCRIPTS=	h_interpreter.sh
@@ -136,7 +138,7 @@ CPPFLAGS.t_signal_and_sp.c+=	-DHAVE_CONTEXTSPFUNC
 SRCS.t_signal_and_sp+=		contextspfunc.S
 .endif
 .if exists(${ARCHDIR}/signalsphandler.S)
-CPPFLAGS.t_signal_and_sp.c+=	-DHAVE_SIGNALSPHANDLER
+CPPFLAGS.t_signal_and_sp.c+=	-DHAVE_SIGNALSPFUNC
 SRCS.t_signal_and_sp+=		signalsphandler.S
 .endif
 .if exists(${ARCHDIR}/threadspfunc.S)
@@ -156,6 +158,7 @@ LDFLAGS.h_execsp_static+=	-Wl,-e,execsp_start
 CPPFLAGS.h_execsp.c+=		-Dexecsp_main=main
 .endif
 LDSTATIC.h_execsp_static=	-static
+LDSTATIC.h_singleprincipal=	-static
 
 .if ${MACHINE_CPU} == "mips"
 CPPFLAGS.contextspfunc.S+=	-I${NETBSDSRCDIR}/lib/libc/arch/mips
