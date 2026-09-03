@@ -28,6 +28,11 @@ include	"secmodel/bsd44/files.bsd44"
 include "secmodel/overlay/files.overlay"
 
 #
+# Experimental single-principal compatibility model
+#
+include "secmodel/singleprincipal/files.singleprincipal"
+
+#
 # Multi-position keylock
 #
 include "secmodel/keylock/files.keylock"
