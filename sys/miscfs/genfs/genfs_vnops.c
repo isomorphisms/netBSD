@@ -59,6 +59,10 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.220 2023/03/03 10:02:51 hannken Exp $");
 
+#if defined(_KERNEL_OPT)
+#include "opt_single_principal.h"
+#endif
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -686,6 +690,12 @@ int
 genfs_can_access(vnode_t *vp, kauth_cred_t cred, uid_t file_uid, gid_t file_gid,
     mode_t file_mode, struct acl *acl, accmode_t accmode)
 {
+#ifdef SINGLE_PRINCIPAL
+	/* Stored ownership is inert legacy metadata; always select owner bits. */
+	file_uid = kauth_cred_geteuid(cred);
+	file_gid = kauth_cred_getegid(cred);
+#endif
+
 	accmode_t dac_granted;
 	int error;
 
@@ -1198,6 +1208,11 @@ int
 genfs_can_chmod(vnode_t *vp, kauth_cred_t cred, uid_t cur_uid,
     gid_t cur_gid, mode_t new_mode)
 {
+#ifdef SINGLE_PRINCIPAL
+	cur_uid = kauth_cred_geteuid(cred);
+	cur_gid = kauth_cred_getegid(cred);
+#endif
+
 	int error;
 
 	/*
@@ -1263,6 +1278,14 @@ genfs_can_chown(vnode_t *vp, kauth_cred_t cred, uid_t cur_uid,
 	if ((error = VOP_ACCESSX(vp, VWRITE_OWNER, cred)) != 0)
 		return (error);
 
+#ifdef SINGLE_PRINCIPAL
+	/* FFS rejects explicit nonzero requests before resolving VNOVAL. */
+	if ((new_uid != cur_uid && new_uid != 0) ||
+	    (new_gid != cur_gid && new_gid != 0))
+		return EOPNOTSUPP;
+	return 0;
+#endif
+
 	/*
 	 * You can only change ownership of a file if:
 	 * You own the file and...
@@ -1303,6 +1326,10 @@ int
 genfs_can_chtimes(vnode_t *vp, kauth_cred_t cred, uid_t owner_uid,
     u_int vaflags)
 {
+#ifdef SINGLE_PRINCIPAL
+	owner_uid = kauth_cred_geteuid(cred);
+#endif
+
 	int error;
 	/*
 	 * Grant permission if the caller is the owner of the file, or
@@ -1342,6 +1369,10 @@ int
 genfs_can_chflags(vnode_t *vp, kauth_cred_t cred,
      uid_t owner_uid, bool changing_sysflags)
 {
+#ifdef SINGLE_PRINCIPAL
+	owner_uid = kauth_cred_geteuid(cred);
+#endif
+
 
 	/* The user must own the file. */
 	if (kauth_cred_geteuid(cred) != owner_uid) {
@@ -1376,6 +1407,11 @@ genfs_can_chflags(vnode_t *vp, kauth_cred_t cred,
 int
 genfs_can_sticky(vnode_t *vp, kauth_cred_t cred, uid_t dir_uid, uid_t file_uid)
 {
+#ifdef SINGLE_PRINCIPAL
+	dir_uid = kauth_cred_geteuid(cred);
+	file_uid = dir_uid;
+#endif
+
 	if (kauth_cred_geteuid(cred) != dir_uid &&
 	    kauth_cred_geteuid(cred) != file_uid)
 		return EPERM;

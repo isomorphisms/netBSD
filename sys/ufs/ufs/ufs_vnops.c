@@ -72,6 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_vnops.c,v 1.264 2026/01/22 03:24:19 riastradh Ex
 #include "opt_ffs.h"
 #include "opt_quota.h"
 #include "opt_uvmhist.h"
+#include "opt_single_principal.h"
 #endif
 
 #include <sys/param.h>
@@ -757,6 +758,13 @@ static int
 ufs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred,
     	struct lwp *l)
 {
+#ifdef SINGLE_PRINCIPAL
+	/* Preserve VNOVAL as "unchanged", but reject named foreign identities. */
+	if ((uid != (uid_t)VNOVAL && uid != 0) ||
+	    (gid != (gid_t)VNOVAL && gid != 0))
+		return SET_ERROR(EOPNOTSUPP);
+#endif
+
 	struct inode	*ip;
 	int		error = 0;
 #if defined(QUOTA) || defined(QUOTA2)

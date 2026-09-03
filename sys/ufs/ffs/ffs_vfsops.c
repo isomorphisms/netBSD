@@ -67,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.385 2026/07/22 14:44:49 hannken Exp
 #include "opt_ffs.h"
 #include "opt_quota.h"
 #include "opt_wapbl.h"
+#include "opt_single_principal.h"
 #endif
 
 #include <sys/param.h>
@@ -2286,6 +2287,10 @@ ffs_newvnode(struct mount *mp, struct vnode *dvp, struct vnode *vp,
 	}
 
 	/* Set uid / gid. */
+#ifdef SINGLE_PRINCIPAL
+	ip->i_gid = 0;
+	ip->i_uid = 0;
+#else
 	if (cred == NOCRED || cred == FSCRED) {
 		ip->i_gid = 0;
 		ip->i_uid = 0;
@@ -2293,6 +2298,7 @@ ffs_newvnode(struct mount *mp, struct vnode *dvp, struct vnode *vp,
 		ip->i_gid = VTOI(dvp)->i_gid;
 		ip->i_uid = kauth_cred_geteuid(cred);
 	}
+#endif
 	DIP_ASSIGN(ip, gid, ip->i_gid);
 	DIP_ASSIGN(ip, uid, ip->i_uid);
 
