@@ -1,0 +1,67 @@
+name: single-principal baseline
+
+on:
+  push:
+    branches:
+      - single-principal-kernel
+    paths:
+      - .github/workflows/single-principal-baseline.yml
+
+permissions:
+  contents: read
+
+jobs:
+  baseline-generic-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout exact trunk base
+        uses: actions/checkout@v4
+        with:
+          ref: f66621237dc60126bd8a972b6064639892b344b7
+          fetch-depth: 1
+
+      - name: Record baseline environment
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p ci-evidence
+          {
+            echo '$ git status --short --branch'
+            git status --short --branch
+            echo '$ git rev-parse HEAD'
+            git rev-parse HEAD
+            echo '$ uname -a'
+            uname -a
+            echo '$ uname -s'
+            uname -s
+            echo '$ uname -m'
+            uname -m
+            echo '$ cc --version'
+            cc --version
+            echo '$ gcc --version'
+            gcc --version
+            echo '$ dpkg-query -W build-essential gcc g++ libc6-dev make'
+            dpkg-query -W build-essential gcc g++ libc6-dev make || true
+          } | tee ci-evidence/baseline-environment.txt
+
+      - name: Build baseline amd64 release
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-evidence "$HOME/obj/netbsd-baseline"
+          printf '%s\n' './build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-baseline" release' \
+            | tee ci-evidence/baseline-command.txt
+          ./build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-baseline" release \
+            2>&1 | tee ci-evidence/baseline-build.log
+          status=${PIPESTATUS[0]}
+          printf '%s\n' "$status" | tee ci-evidence/baseline-exit-status.txt
+          exit "$status"
+
+      - name: Upload baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: single-principal-baseline-evidence
+          path: ci-evidence/
+          if-no-files-found: error
