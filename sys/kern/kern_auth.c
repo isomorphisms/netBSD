@@ -32,6 +32,10 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.86 2026/01/03 23:58:04 riastradh Exp $");
 
+#ifdef _KERNEL_OPT
+#include "opt_single_principal.h"
+#endif
+
 #include <sys/param.h>
 #include <sys/types.h>
 
@@ -451,6 +455,11 @@ int
 kauth_cred_setgroups(kauth_cred_t cred, const gid_t *grbuf, size_t len,
     uid_t gmuid, enum uio_seg seg)
 {
+#ifdef SINGLE_PRINCIPAL
+	if (len != 0)
+		return SET_ERROR(EOPNOTSUPP);
+#endif
+
 	int error = 0;
 
 	KASSERT(cred != NULL);

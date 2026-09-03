@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.124 2026/01/04 01:37:01 riastradh Ex
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_43.h"
+#include "opt_single_principal.h"
 #endif
 
 #include <sys/param.h>
@@ -227,6 +228,11 @@ sys_getegid(struct lwp *l, const void *v, register_t *retval)
 int
 sys_getgroups(struct lwp *l, const struct sys_getgroups_args *uap, register_t *retval)
 {
+#ifdef SINGLE_PRINCIPAL
+	*retval = 0;
+	return 0;
+#endif
+
 	/* {
 		syscallarg(int) gidsetsize;
 		syscallarg(gid_t *) gidset;
@@ -301,6 +307,14 @@ sys_setpgid(struct lwp *l, const struct sys_setpgid_args *uap,
 int
 do_setresuid(struct lwp *l, uid_t r, uid_t e, uid_t sv, u_int flags)
 {
+#ifdef SINGLE_PRINCIPAL
+	if ((r != (uid_t)-1 && r != 0) ||
+	    (e != (uid_t)-1 && e != 0) ||
+	    (sv != (uid_t)-1 && sv != 0))
+		return SET_ERROR(EOPNOTSUPP);
+	return 0;
+#endif
+
 	struct proc *p = l->l_proc;
 	kauth_cred_t cred, ncred;
 
@@ -382,6 +396,14 @@ do_setresuid(struct lwp *l, uid_t r, uid_t e, uid_t sv, u_int flags)
 int
 do_setresgid(struct lwp *l, gid_t r, gid_t e, gid_t sv, u_int flags)
 {
+#ifdef SINGLE_PRINCIPAL
+	if ((r != (gid_t)-1 && r != 0) ||
+	    (e != (gid_t)-1 && e != 0) ||
+	    (sv != (gid_t)-1 && sv != 0))
+		return SET_ERROR(EOPNOTSUPP);
+	return 0;
+#endif
+
 	struct proc *p = l->l_proc;
 	kauth_cred_t cred, ncred;
 
@@ -545,6 +567,11 @@ sys_setregid(struct lwp *l, const struct sys_setregid_args *uap, register_t *ret
 int
 sys_issetugid(struct lwp *l, const void *v, register_t *retval)
 {
+#ifdef SINGLE_PRINCIPAL
+	*retval = 0;
+	return 0;
+#endif
+
 	struct proc *p = l->l_proc;
 
 	/*
@@ -563,6 +590,12 @@ sys_issetugid(struct lwp *l, const void *v, register_t *retval)
 int
 sys_setgroups(struct lwp *l, const struct sys_setgroups_args *uap, register_t *retval)
 {
+#ifdef SINGLE_PRINCIPAL
+	if (SCARG(uap, gidsetsize) != 0)
+		return SET_ERROR(EOPNOTSUPP);
+	return 0;
+#endif
+
 	/* {
 		syscallarg(int) gidsetsize;
 		syscallarg(const gid_t *) gidset;

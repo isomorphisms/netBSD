@@ -70,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.535 2026/08/28 12:02:15 riastradh Ex
 #include "opt_modular.h"
 #include "opt_pax.h"
 #include "opt_syscall_debug.h"
+#include "opt_single_principal.h"
 #include "veriexec.h"
 
 #include <sys/param.h>
@@ -1070,6 +1071,19 @@ credexec(struct lwp *l, struct execve_data *data)
 	struct proc *p = l->l_proc;
 	struct vattr *attr = &data->ed_attr;
 	int error;
+
+#ifdef SINGLE_PRINCIPAL
+	if (kauth_cred_getuid(l->l_cred) != 0 ||
+	    kauth_cred_geteuid(l->l_cred) != 0 ||
+	    kauth_cred_getsvuid(l->l_cred) != 0 ||
+	    kauth_cred_getgid(l->l_cred) != 0 ||
+	    kauth_cred_getegid(l->l_cred) != 0 ||
+	    kauth_cred_getsvgid(l->l_cred) != 0 ||
+	    kauth_cred_ngroups(l->l_cred) != 0)
+		return SET_ERROR(EINVAL);
+	p->p_flag &= ~PK_SUGID;
+	return 0;
+#endif
 
 	/*
 	 * Deal with set[ug]id.  MNT_NOSUID has already been used to disable

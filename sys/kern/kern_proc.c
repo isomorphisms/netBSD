@@ -71,6 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.286 2026/08/14 03:04:22 riastradh Ex
 #include "opt_dtrace.h"
 #include "opt_compat_netbsd32.h"
 #include "opt_kaslr.h"
+#include "opt_single_principal.h"
 #endif
 
 #if defined(__HAVE_COMPAT_NETBSD32) && !defined(COMPAT_NETBSD32) \
@@ -1857,6 +1858,20 @@ proc_crmod_enter(void)
 void
 proc_crmod_leave(kauth_cred_t scred, kauth_cred_t fcred, bool sugid)
 {
+#ifdef SINGLE_PRINCIPAL
+	if (scred != NULL) {
+		KASSERTMSG(kauth_cred_getuid(scred) == 0 &&
+		    kauth_cred_geteuid(scred) == 0 &&
+		    kauth_cred_getsvuid(scred) == 0 &&
+		    kauth_cred_getgid(scred) == 0 &&
+		    kauth_cred_getegid(scred) == 0 &&
+		    kauth_cred_getsvgid(scred) == 0 &&
+		    kauth_cred_ngroups(scred) == 0,
+		    "noncanonical process credential in single-principal mode");
+		sugid = false;
+	}
+#endif
+
 	struct lwp *l = curlwp, *l2;
 	struct proc *p = l->l_proc;
 	kauth_cred_t oc;
