@@ -20,247 +20,23 @@ jobs:
           ref: single-principal-kernel
           fetch-depth: 0
 
-      - name: Patch credential paths
+      - name: Apply credential implementation
         shell: bash
         run: |
           set -eu
-          python3 <<'PY'
-          from pathlib import Path
-
-          def load(path):
-              return Path(path).read_text()
-
-          def save(path, text):
-              Path(path).write_text(text)
-
-          def replace_once(text, old, new, path):
-              n = text.count(old)
-              if n != 1:
-                  raise SystemExit(f"{path}: expected one occurrence, found {n}: {old!r}")
-              return text.replace(old, new, 1)
-
-          def insert_function_start(text, name, code, path):
-              needle = "\n" + name + "("
-              start = text.find(needle)
-              if start < 0:
-                  raise SystemExit(f"{path}: function {name} not found")
-              brace = text.find("\n{", start)
-              if brace < 0:
-                  raise SystemExit(f"{path}: opening brace for {name} not found")
-              pos = brace + 2
-              return text[:pos] + "\n" + code.rstrip() + "\n" + text[pos:]
-
-          def insert_after_in_function(text, name, marker, code, path):
-              needle = "\n" + name + "("
-              start = text.find(needle)
-              if start < 0:
-                  raise SystemExit(f"{path}: function {name} not found")
-              pos = text.find(marker, start)
-              if pos < 0:
-                  raise SystemExit(f"{path}: marker in {name} not found: {marker!r}")
-              pos += len(marker)
-              return text[:pos] + code + text[pos:]
-
-          path = "sys/kern/kern_prot.c"
-          s = load(path)
-          s = replace_once(s, '#include "opt_compat_43.h"\n',
-              '#include "opt_compat_43.h"\n#include "opt_single_principal.h"\n', path)
-          s = insert_function_start(s, "sys_getgroups", '''#ifdef SINGLE_PRINCIPAL
-\t*retval = 0;
-\treturn 0;
-#endif''', path)
-          s = insert_function_start(s, "do_setresuid", '''#ifdef SINGLE_PRINCIPAL
-\tif ((r != (uid_t)-1 && r != 0) ||
-\t    (e != (uid_t)-1 && e != 0) ||
-\t    (sv != (uid_t)-1 && sv != 0))
-\t\treturn SET_ERROR(EOPNOTSUPP);
-\treturn 0;
-#endif''', path)
-          s = insert_function_start(s, "do_setresgid", '''#ifdef SINGLE_PRINCIPAL
-\tif ((r != (gid_t)-1 && r != 0) ||
-\t    (e != (gid_t)-1 && e != 0) ||
-\t    (sv != (gid_t)-1 && sv != 0))
-\t\treturn SET_ERROR(EOPNOTSUPP);
-\treturn 0;
-#endif''', path)
-          s = insert_function_start(s, "sys_setgroups", '''#ifdef SINGLE_PRINCIPAL
-\tif (SCARG(uap, gidsetsize) != 0)
-\t\treturn SET_ERROR(EOPNOTSUPP);
-\treturn 0;
-#endif''', path)
-          s = insert_function_start(s, "sys_issetugid", '''#ifdef SINGLE_PRINCIPAL
-\t*retval = 0;
-\treturn 0;
-#endif''', path)
-          save(path, s)
-
-          path = "sys/kern/kern_auth.c"
-          s = load(path)
-          s = replace_once(s,
-              '__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.86 2026/01/03 23:58:04 riastradh Exp $");\n',
-              '__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.86 2026/01/03 23:58:04 riastradh Exp $");\n\n#ifdef _KERNEL_OPT\n#include "opt_single_principal.h"\n#endif\n', path)
-          s = insert_function_start(s, "kauth_cred_setgroups", '''#ifdef SINGLE_PRINCIPAL
-\tif (len != 0)
-\t\treturn SET_ERROR(EOPNOTSUPP);
-#endif''', path)
-          save(path, s)
-
-          path = "sys/kern/kern_proc.c"
-          s = load(path)
-          s = replace_once(s, '#include "opt_kaslr.h"\n',
-              '#include "opt_kaslr.h"\n#include "opt_single_principal.h"\n', path)
-          s = insert_function_start(s, "proc_crmod_leave", '''#ifdef SINGLE_PRINCIPAL
-\tif (scred != NULL) {
-\t\tKASSERTMSG(kauth_cred_getuid(scred) == 0 &&
-\t\t    kauth_cred_geteuid(scred) == 0 &&
-\t\t    kauth_cred_getsvuid(scred) == 0 &&
-\t\t    kauth_cred_getgid(scred) == 0 &&
-\t\t    kauth_cred_getegid(scred) == 0 &&
-\t\t    kauth_cred_getsvgid(scred) == 0 &&
-\t\t    kauth_cred_ngroups(scred) == 0,
-\t\t    "noncanonical process credential in single-principal mode");
-\t\tsugid = false;
-\t}
-#endif''', path)
-          save(path, s)
-
-          path = "sys/kern/kern_exec.c"
-          s = load(path)
-          s = replace_once(s, '#include "opt_syscall_debug.h"\n',
-              '#include "opt_syscall_debug.h"\n#include "opt_single_principal.h"\n', path)
-          s = insert_after_in_function(s, "credexec", '\tint error;\n', '''
-#ifdef SINGLE_PRINCIPAL
-\tif (kauth_cred_getuid(l->l_cred) != 0 ||
-\t    kauth_cred_geteuid(l->l_cred) != 0 ||
-\t    kauth_cred_getsvuid(l->l_cred) != 0 ||
-\t    kauth_cred_getgid(l->l_cred) != 0 ||
-\t    kauth_cred_getegid(l->l_cred) != 0 ||
-\t    kauth_cred_getsvgid(l->l_cred) != 0 ||
-\t    kauth_cred_ngroups(l->l_cred) != 0)
-\t\treturn SET_ERROR(EINVAL);
-\tp->p_flag &= ~PK_SUGID;
-\treturn 0;
-#endif
-''', path)
-          save(path, s)
-          PY
-
+          python3 .github/single-principal-apply.py credentials
           git diff --check
-          git diff -- sys/kern/kern_auth.c sys/kern/kern_proc.c sys/kern/kern_prot.c sys/kern/kern_exec.c
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add sys/kern/kern_auth.c sys/kern/kern_proc.c sys/kern/kern_prot.c sys/kern/kern_exec.c
           git commit -m 'kern: collapse process credentials to one compatibility identity'
 
-      - name: Patch FFS and genfs policy
+      - name: Apply FFS and genfs implementation
         shell: bash
         run: |
           set -eu
-          python3 <<'PY'
-          from pathlib import Path
-
-          def load(path): return Path(path).read_text()
-          def save(path, text): Path(path).write_text(text)
-          def replace_once(text, old, new, path):
-              n = text.count(old)
-              if n != 1:
-                  raise SystemExit(f"{path}: expected one occurrence, found {n}: {old!r}")
-              return text.replace(old, new, 1)
-          def insert_function_start(text, name, code, path):
-              start = text.find("\n" + name + "(")
-              if start < 0: raise SystemExit(f"{path}: {name} not found")
-              brace = text.find("\n{", start)
-              if brace < 0: raise SystemExit(f"{path}: {name} brace not found")
-              pos = brace + 2
-              return text[:pos] + "\n" + code.rstrip() + "\n" + text[pos:]
-          def insert_after_in_function(text, name, marker, code, path):
-              start = text.find("\n" + name + "(")
-              if start < 0: raise SystemExit(f"{path}: {name} not found")
-              pos = text.find(marker, start)
-              if pos < 0: raise SystemExit(f"{path}: {name} marker not found")
-              pos += len(marker)
-              return text[:pos] + code + text[pos:]
-
-          path = "sys/miscfs/genfs/genfs_vnops.c"
-          s = load(path)
-          rcs = '__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.220 2023/03/03 10:02:51 hannken Exp $");\n'
-          s = replace_once(s, rcs, rcs + '\n#if defined(_KERNEL_OPT)\n#include "opt_single_principal.h"\n#endif\n', path)
-          s = insert_function_start(s, "genfs_can_access", '''#ifdef SINGLE_PRINCIPAL
-\t/* Stored ownership is inert legacy metadata; always select owner bits. */
-\tfile_uid = kauth_cred_geteuid(cred);
-\tfile_gid = kauth_cred_getegid(cred);
-#endif''', path)
-          s = insert_function_start(s, "genfs_can_chmod", '''#ifdef SINGLE_PRINCIPAL
-\tcur_uid = kauth_cred_geteuid(cred);
-\tcur_gid = kauth_cred_getegid(cred);
-#endif''', path)
-          s = insert_function_start(s, "genfs_can_chflags", '''#ifdef SINGLE_PRINCIPAL
-\towner_uid = kauth_cred_geteuid(cred);
-#endif''', path)
-          s = insert_function_start(s, "genfs_can_chtimes", '''#ifdef SINGLE_PRINCIPAL
-\towner_uid = kauth_cred_geteuid(cred);
-#endif''', path)
-          s = insert_function_start(s, "genfs_can_sticky", '''#ifdef SINGLE_PRINCIPAL
-\tdir_uid = kauth_cred_geteuid(cred);
-\tfile_uid = dir_uid;
-#endif''', path)
-          chown_auth = '''\tif ((error = VOP_ACCESSX(vp, VWRITE_OWNER, cred)) != 0)\n\t\treturn (error);\n'''
-          s = insert_after_in_function(s, "genfs_can_chown", chown_auth, '''
-#ifdef SINGLE_PRINCIPAL
-\t/* FFS rejects explicit nonzero requests before resolving VNOVAL. */
-\tif ((new_uid != cur_uid && new_uid != 0) ||
-\t    (new_gid != cur_gid && new_gid != 0))
-\t\treturn EOPNOTSUPP;
-\treturn 0;
-#endif
-''', path)
-          save(path, s)
-
-          path = "sys/ufs/ufs/ufs_vnops.c"
-          s = load(path)
-          s = replace_once(s, '#include "opt_uvmhist.h"\n',
-              '#include "opt_uvmhist.h"\n#include "opt_single_principal.h"\n', path)
-          s = insert_function_start(s, "ufs_chown", '''#ifdef SINGLE_PRINCIPAL
-\t/* Preserve VNOVAL as "unchanged", but reject named foreign identities. */
-\tif ((uid != (uid_t)VNOVAL && uid != 0) ||
-\t    (gid != (gid_t)VNOVAL && gid != 0))
-\t\treturn SET_ERROR(EOPNOTSUPP);
-#endif''', path)
-          save(path, s)
-
-          path = "sys/ufs/ffs/ffs_vfsops.c"
-          s = load(path)
-          s = replace_once(s, '#include "opt_wapbl.h"\n',
-              '#include "opt_wapbl.h"\n#include "opt_single_principal.h"\n', path)
-          old = '''\t/* Set uid / gid. */
-\tif (cred == NOCRED || cred == FSCRED) {
-\t\tip->i_gid = 0;
-\t\tip->i_uid = 0;
-\t} else {
-\t\tip->i_gid = VTOI(dvp)->i_gid;
-\t\tip->i_uid = kauth_cred_geteuid(cred);
-\t}
-'''
-          new = '''\t/* Set uid / gid. */
-#ifdef SINGLE_PRINCIPAL
-\tip->i_gid = 0;
-\tip->i_uid = 0;
-#else
-\tif (cred == NOCRED || cred == FSCRED) {
-\t\tip->i_gid = 0;
-\t\tip->i_uid = 0;
-\t} else {
-\t\tip->i_gid = VTOI(dvp)->i_gid;
-\t\tip->i_uid = kauth_cred_geteuid(cred);
-\t}
-#endif
-'''
-          s = replace_once(s, old, new, path)
-          save(path, s)
-          PY
-
+          python3 .github/single-principal-apply.py vfs
           git diff --check
-          git diff -- sys/miscfs/genfs/genfs_vnops.c sys/ufs/ufs/ufs_vnops.c sys/ufs/ffs/ffs_vfsops.c
           git add sys/miscfs/genfs/genfs_vnops.c sys/ufs/ufs/ufs_vnops.c sys/ufs/ffs/ffs_vfsops.c
           git commit -m 'vfs: use one mode-bit class without UID distinctions'
 
@@ -276,13 +52,9 @@ jobs:
         run: |
           set +e
           mkdir -p ci-evidence "$HOME/obj/netbsd-singleprincipal"
-          {
-            echo '$ git rev-parse HEAD'
-            git rev-parse HEAD
-            echo '$ ./build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-singleprincipal" tools kernel=SINGLEPRINCIPAL'
-          } | tee ci-evidence/implementation-command.txt
-          ./build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-singleprincipal" tools kernel=SINGLEPRINCIPAL \
-            2>&1 | tee ci-evidence/singleprincipal-compile.log
+          echo './build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-singleprincipal" tools kernel=SINGLEPRINCIPAL' | tee ci-evidence/implementation-command.txt
+          git rev-parse HEAD | tee ci-evidence/implementation-head.txt
+          ./build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-singleprincipal" tools kernel=SINGLEPRINCIPAL 2>&1 | tee ci-evidence/singleprincipal-compile.log
           status=${PIPESTATUS[0]}
           printf '%s\n' "$status" | tee ci-evidence/singleprincipal-compile-status.txt
           exit "$status"
