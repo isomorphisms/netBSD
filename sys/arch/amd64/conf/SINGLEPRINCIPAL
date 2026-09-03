@@ -1,0 +1,31 @@
+# $NetBSD$
+#
+# SINGLEPRINCIPAL - amd64 executable spike for single-principal
+# compatibility mode.  Keep GENERIC hardware/network coverage; remove only
+# identity-dependent facilities that are not modeled in phase 1.
+
+include "arch/amd64/conf/GENERIC"
+
+ident		"SINGLEPRINCIPAL"
+
+options		SINGLE_PRINCIPAL
+no options	secmodel_bsd44
+options		secmodel_singleprincipal
+
+# Identity-dependent facilities intentionally outside phase-1 semantics.
+no options	UFS_ACL
+no options	QUOTA
+no options	QUOTA2
+no options	NFSSERVER
+no options	SYSVMSG
+no options	SYSVSEM
+no options	SYSVSHM
+
+# Headless QEMU acceptance console; this does not remove the GENERIC consoles.
+options		CONSDEVNAME="\"com\"",CONADDR=0x3f8,CONSPEED=115200
+
+# Acceptance root is an FFS image embedded in md(4), booted single-user.
+options		MEMORY_DISK_HOOKS
+options		MEMORY_DISK_IS_ROOT
+options		MEMORY_DISK_ROOT_SIZE=65536
+options		MEMORY_DISK_RBFLAGS=RB_SINGLE
