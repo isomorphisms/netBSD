@@ -1,0 +1,31 @@
+name: single-principal normalize
+
+on:
+  push:
+    branches:
+      - single-principal-kernel
+    paths:
+      - .github/workflows/single-principal-normalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: single-principal-kernel
+          fetch-depth: 0
+      - name: Normalize internal process credentials
+        shell: bash
+        run: |
+          set -eu
+          python3 .github/single-principal-normalize.py
+          git diff --check
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add sys/kern/kern_proc.c
+          git commit -m 'kern: normalize unexpected internal process credentials'
+          git push origin HEAD:single-principal-kernel
