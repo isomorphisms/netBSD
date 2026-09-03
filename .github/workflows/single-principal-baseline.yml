@@ -8,10 +8,11 @@ on:
       - .github/workflows/single-principal-baseline.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   baseline-generic-release:
+    if: github.event.head_commit.message == 'ci: capture baseline amd64 release evidence'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -65,3 +66,64 @@ jobs:
           name: single-principal-baseline-evidence
           path: ci-evidence/
           if-no-files-found: error
+
+  implementation:
+    if: github.event.head_commit.message == 'ci: run single-principal implementation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: single-principal-kernel
+          fetch-depth: 0
+
+      - name: Apply credential implementation
+        shell: bash
+        run: |
+          set -eu
+          python3 .github/single-principal-apply.py credentials
+          git diff --check
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add sys/kern/kern_auth.c sys/kern/kern_proc.c sys/kern/kern_prot.c sys/kern/kern_exec.c
+          git commit -m 'kern: collapse process credentials to one compatibility identity'
+
+      - name: Apply FFS/genfs implementation
+        shell: bash
+        run: |
+          set -eu
+          python3 .github/single-principal-apply.py vfs
+          git diff --check
+          git add sys/miscfs/genfs/genfs_vnops.c sys/ufs/ufs/ufs_vnops.c sys/ufs/ffs/ffs_vfsops.c
+          git commit -m 'vfs: use one mode-bit class without UID distinctions'
+
+      - name: Push implementation commits
+        shell: bash
+        run: |
+          set -eu
+          git status --short --branch
+          git push origin HEAD:single-principal-kernel
+
+      - name: Compile SINGLEPRINCIPAL
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-evidence "$HOME/obj/netbsd-singleprincipal"
+          {
+            echo '$ git rev-parse HEAD'
+            git rev-parse HEAD
+            echo '$ ./build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-singleprincipal" tools kernel=SINGLEPRINCIPAL'
+          } | tee ci-evidence/implementation-command.txt
+          ./build.sh -U -u -j4 -m amd64 -O "$HOME/obj/netbsd-singleprincipal" tools kernel=SINGLEPRINCIPAL \
+            2>&1 | tee ci-evidence/singleprincipal-compile.log
+          status=${PIPESTATUS[0]}
+          printf '%s\n' "$status" | tee ci-evidence/singleprincipal-compile-status.txt
+          exit "$status"
+
+      - name: Upload implementation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: single-principal-implementation-evidence
+          path: ci-evidence/
+          if-no-files-found: warn
