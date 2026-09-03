@@ -24,11 +24,13 @@ no options	SYSVMSG
 no options	SYSVSEM
 no options	SYSVSHM
 
-# Headless QEMU acceptance console; this does not remove the GENERIC consoles.
+# Headless QEMU acceptance console; this does not remove GENERIC devices.
 options		CONSDEVNAME="\"com\"",CONADDR=0x3f8,CONSPEED=115200
 
 # Acceptance root is an FFS image embedded in md(4), booted single-user.
-options		MEMORY_DISK_HOOKS
+# Follow the amd64 INSTALL kernel's established memory-disk arrangement.
+no options	MEMORY_DISK_DYNAMIC
 options		MEMORY_DISK_IS_ROOT
+options		MEMORY_DISK_SERVER=0
 options		MEMORY_DISK_ROOT_SIZE=65536
 options		MEMORY_DISK_RBFLAGS=RB_SINGLE
