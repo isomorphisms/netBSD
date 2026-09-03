@@ -12,6 +12,9 @@ options		SINGLE_PRINCIPAL
 no options	secmodel_bsd44
 options		secmodel_singleprincipal
 
+# Keep securelevel as an independent restriction in this experiment.
+no options	INSECURE
+
 # Identity-dependent facilities intentionally outside phase-1 semantics.
 no options	UFS_ACL
 no options	QUOTA
