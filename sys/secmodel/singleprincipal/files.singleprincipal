@@ -1,0 +1,7 @@
+# $NetBSD$
+
+defflag	opt_single_principal.h	SINGLE_PRINCIPAL
+defflag	secmodel_singleprincipal : SINGLE_PRINCIPAL, secmodel_suser,
+				 secmodel_securelevel, secmodel_extensions
+
+file	secmodel/singleprincipal/secmodel_singleprincipal.c secmodel_singleprincipal
